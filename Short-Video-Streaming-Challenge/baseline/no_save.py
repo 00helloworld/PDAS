@@ -58,6 +58,13 @@ class Algorithm:
 
     # Define your algorithm
     def run(self, delay, rebuf, video_size, end_of_video, play_video_id, Players, first_step=False):
+        print('delay', delay)
+        print('rebuf', rebuf)
+        print('video_size', video_size)
+        print('end_of_video', end_of_video)
+        print('play_video_id', play_video_id)
+        print('Players', Players)
+        print('first_step', first_step)
         DEFAULT_QUALITY = 0
         if first_step:   # 第一步没有任何信息
             self.sleep_time = 0
@@ -118,6 +125,10 @@ class Algorithm:
             download_video_seq = download_video_id - play_video_id
             # update past_errors and past_bandwidth_ests
             self.estimate_bw(P[download_video_seq])
+            print(f"-- past_bandwidth: {self.past_bandwidth}")
+            print(f"-- past_bandwidth_ests: {self.past_bandwidth_ests}")
+            print(f"-- past_errors: {self.past_errors}")
+            # x = a
             buffer_size = Players[download_video_seq].get_buffer_size()  # ms
             # print("no_save:::", buffer_size)
             video_chunk_remain = Players[download_video_seq].get_remain_video_num()
@@ -130,5 +141,5 @@ class Algorithm:
             # print("past_bandwidths:", self.past_bandwidth[-5:], "past_ests:", self.past_bandwidth_ests[-5:])
             bit_rate = mpc_module.mpc(self.past_bandwidth, self.past_bandwidth_ests, self.past_errors, all_future_chunks_size[download_video_seq], P[download_video_seq], buffer_size, chunk_sum, video_chunk_remain, last_quality)
             self.sleep_time = 0.0
-
+        print('---------', download_video_id, bit_rate, self.sleep_time)
         return download_video_id, bit_rate, self.sleep_time

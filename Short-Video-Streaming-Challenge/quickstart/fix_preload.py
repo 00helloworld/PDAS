@@ -81,6 +81,6 @@ class Algorithm:
             else:
                 bit_rate = 0
             sleep_time = 0.0
-
+        print('---------', download_video_id, bit_rate, self.sleep_time)
         return download_video_id, bit_rate, sleep_time
 

@@ -1,3 +1,35 @@
+# # PATH
+# # if you want to call your model ,the path setting is
+
+# # NN_MODEL = "/home/team/"$YOUR TEAM NAME"/submit/results/nn_model_ep_18200.ckpt" # model path settings
+# import random
+# from simulator.video_player import Player
+# class Algorithm:
+#     def __init__(self):
+#         # fill your self params
+#         self.buffer_size = 0
+
+#     # Intial
+#     def Initialize(self):
+#         # Initialize your session or something
+#         self.buffer_size = 0
+
+#     # Define your algorithm
+#     # The args you can get are as follows:
+#     # 1. delay: the time cost of your last operation
+#     # 2. rebuf: the length of rebufferment
+#     # 3. video_size: the size of the last downloaded chunk
+#     # 4. end_of_video: if the last video was ended
+#     # 5. play_video_id: the id of the current video
+#     # 6. Players: the video data of a RECOMMEND QUEUE of 5 (see specific definitions in readme)
+#     # 7. first_step: is this your first step?
+#     def run(self, delay, rebuf, video_size, end_of_video, play_video_id, Players, first_step=False):
+#         download_video_id = 0
+#         bit_rate = 0
+#         sleep_time = 500.0
+#         download_video_id = random.randint(0,4)
+#         bit_rate = random.uniform(0, 2)
+#         return download_video_id, bit_rate, sleep_time
 
 
 import numpy as np
@@ -5,6 +37,12 @@ import sys
 sys.path.append("..")
 from simulator.video_player import BITRATE_LEVELS
 from simulator import mpc_module
+
+
+import numpy as np
+import sys
+sys.path.append("..")
+from simulator.video_player import BITRATE_LEVELS
 
 VIDEO_BIT_RATE = [750,1200,1850]
 MPC_FUTURE_CHUNK_COUNT = 5
@@ -33,8 +71,8 @@ class Algorithm:
         # 重置初始化
         self.buffer_size = 0
         self.past_bandwidth = list(np.zeros(PAST_BW_LEN))
-        self.past_bandwidth_ests = list(np.zeros(PAST_BW_LEN))
-        self.past_errors = list(np.zeros(PAST_BW_LEN))
+        self.past_bandwidth_ests = []
+        self.past_errors = []
 
     def run(self, delay, rebuf, video_size, end_of_video, play_video_id, Players, first_step=False):
         # 1. delay: the time cost of your last operation
@@ -44,35 +82,27 @@ class Algorithm:
         # 5. play_video_id: the id of the current video
         # 6. Players: the video data of a RECOMMEND QUEUE of 5 (see specific definitions in readme)
         # 7. first_step: is this your first step?
-        if first_step:   # 第一步
+        
+        if first_step:   # 第一步没有任何信息
             self.sleep_time = 0
-            return play_video_id, 1, self.sleep_time
-        
-        
-        if self.sleep_time == 0:
-            self.past_bandwidth = list(np.roll(self.past_bandwidth, -1))
-            self.past_bandwidth[-1] = (float(video_size)/1000000.0) /(float(delay) / 1000.0)  # MB / s
+            return 0, 2, self.sleep_time
         
         # 1. 更新带宽估计
-        self.update_bandwidth_estimate_(video_size, delay)
+        self.update_bandwidth_estimate(video_size, delay)
         
         # 2. 计算保留概率和Max Buffer阈值
         retention_probs = self.calculate_retention_probabilities(Players)
         max_buffer_thresholds = self.calculate_max_buffer_thresholds(Players, retention_probs)
         
-        # 3. 遍历视频，选择最优的比特率和视频
+        # 3. 遍历视频，选择最优的比特率和视频块
         best_video_id, best_bitrate, best_sleep_time = None, None, None
         best_Ui = float('-inf')
         
-        res = []
         for i, player in enumerate(Players):
-            remaining_chunks = player.get_chunk_sum() - player.get_chunk_counter()  # 计算剩余的块数
-            P = min(5, remaining_chunks)  # 确保 P 不超过剩余块数
-            # P = remaining_chunks
             if player.get_buffer_size() <= max_buffer_thresholds[i] and player.video_chunk_counter < player.chunk_num:
-                # 计算最优的比特率选择
+                # 调用K-step RobustMPC来计算最优的比特率选择
                 bit_rate = mpc(self.past_bandwidth, self.past_bandwidth_ests, self.past_errors, 
-                               player.get_future_video_size(P), P, player.get_buffer_size(), 
+                               player.get_future_video_size(5), 5, player.get_buffer_size(), 
                                player.get_chunk_sum(), player.get_remain_video_num(), last_quality=0)
                 
                 # 计算总的重缓冲时间
@@ -82,7 +112,6 @@ class Algorithm:
                 current_qoe = self.calculate_qoe(bit_rate, retention_probs[i], player, total_rebuffering_time, rebuf)
                 current_cost = self.calculate_cost(bit_rate, player)
                 current_Ui = current_qoe - self.w4 * current_cost
-                res.append((bit_rate, current_qoe, current_Ui))
                 
                 # 如果当前的选择比之前的好，更新选择
                 if current_Ui > best_Ui:
@@ -92,24 +121,23 @@ class Algorithm:
                     best_sleep_time = 0
         
         # 4. 决策输出，如果没有合适的块可供下载，则返回睡眠时间
+        
+        print('-- len(Players):', len(Players))
         if best_video_id is not None:
+            print('-- True play_video_id, best_video_id, best_bitrate, self.sleep_time:', play_video_id, best_video_id, best_bitrate, self.sleep_time)
             return best_video_id, best_bitrate, best_sleep_time
         else:
-            self.sleep_time = 500
-            return play_video_id, 0, self.sleep_time  # 睡眠时间设为500ms
+            print('-- False play_video_id, best_video_id, best_bitrate, self.sleep_time:', play_video_id, best_video_id, best_bitrate, self.sleep_time)
+            return play_video_id, 0, 500  # 睡眠时间设为500ms
 
-
-    def update_bandwidth_estimate_(self, video_size, delay):
-        # record the newest error
-        curr_error = 0  # default assumes that this is the first request so error is 0 since we have never predicted bandwidth
-        if (len(self.past_bandwidth_ests) > 0) and self.past_bandwidth[-1] != 0:
-            curr_error = abs(self.past_bandwidth_ests[-1] - self.past_bandwidth[-1])/float(self.past_bandwidth[-1])
-        self.past_errors.append(curr_error)
-        
-        past_bandwidth_ests = (float(video_size)/1000000.0) /(float(delay) / 1000.0)  # MB / s
-        
-        self.past_bandwidth_ests.append(past_bandwidth_ests)
-
+    def update_bandwidth_estimate(self, video_size, delay):
+        # 根据上次的下载数据更新带宽估计
+        estimated_bandwidth = video_size / ((delay+0.01) / 1000.0)
+        estimated_bandwidth = estimated_bandwidth if estimated_bandwidth!=0 else self.past_bandwidth[-1]
+        self.past_bandwidth.append(estimated_bandwidth)
+        print('-- 更新带宽', video_size, delay, estimated_bandwidth, self.past_bandwidth)
+        if len(self.past_bandwidth) > PAST_BW_LEN:
+            self.past_bandwidth.pop(0)
 
     def calculate_retention_probabilities(self, Players):
         # 计算每个视频块的保留概率 p_{i,m}(mc)
@@ -124,9 +152,7 @@ class Algorithm:
         # 计算每个视频的最大缓冲区阈值 b_{i,m}^{max}
         max_buffer_thresholds = []
         for i, player in enumerate(Players):
-            # max_buffer = self.calculate_max_buffer_threshold_(player, retention_probs[i])
-            max_buffer = self.calculate_max_buffer_threshold(i, player, retention_probs[i])
-
+            max_buffer = self.calculate_max_buffer_threshold(player, retention_probs[i])
             max_buffer_thresholds.append(max_buffer)
         return max_buffer_thresholds
     
@@ -149,68 +175,25 @@ class Algorithm:
         
         # 如果当前播放时间超出所有已知时间点，返回最小的保留率
         return user_retent_rate[-1]
-    
 
-    def calculate_retention_probability_z(self, player, z):
-        # 计算保留概率 p_{j,z+k}(z)
-
-        user_time, user_retent_rate = player.get_user_model()
-
-        # 计算当前的播放时间（毫秒）
-        if z == 0:
-            current_play_time = 0
-        else:
-            current_play_time = z * 1000  # z 为当前播放的块数，因此转换为 ms
-
-        # 如果当前播放时间已经超过用户模型的时间范围，返回最小保留率
-        if current_play_time >= user_time[-1]:
-            return 0.0
-
-        # 手动进行线性插值
-        for i in range(1, len(user_time)):
-            if current_play_time < user_time[i]:
-                # 线性插值计算保留率
-                time_diff = user_time[i] - user_time[i - 1]
-                rate_diff = float(user_retent_rate[i]) - float(user_retent_rate[i - 1])
-                interpolated_value = float(user_retent_rate[i - 1]) + ((current_play_time - user_time[i - 1]) / time_diff) * rate_diff
-                return interpolated_value
-
-        # 如果当前播放时间超出所有已知时间点，返回最小的保留率
-        return user_retent_rate[-1]
-
-    
-    def calculate_max_buffer_threshold(self, i, player, retention_prob):
-        # 获取当前块的最大下载时间 T_{i,m}^{\text{max}}
-        # max_download_time = player.get_video_size(0) / self.past_bandwidth[-1]
-        max_download_time = player.get_video_len() 
-        
-        # 计算最小缓冲阈值 b_{i}^{\text{th}}，使用指数衰减模型
-        i_c = 0  # 当前播放的视频ID
-        i = i  # 正在计算的视频ID
-        C = self.past_bandwidth_ests[-1]  # 当前估计的带宽
-        epsilon = 1.0  # 参数
-        lambda1 = 3.5  # 参数
-        lambda2 = 0.15  # 参数
-
-        # 计算 b_{i}^{\text{th}} = ε * e^{-λ1*C - λ2*(i - i_c)}
-        min_buffer_threshold = epsilon * np.exp(-lambda1 * C - lambda2 * (i - i_c))
-        
-        # 计算最大缓冲区阈值 b_{i,m}^{\text{max}} = max(p_{i,m}(m_c) * T_{i,m}^{\text{max}}, b_{i}^{\text{th}})
-        max_buffer_threshold = max(min_buffer_threshold * 1000, retention_prob * max_download_time) 
-        
+    def calculate_max_buffer_threshold(self, player, retention_prob):
+        # 实现最大缓冲区阈值的计算逻辑
+        max_download_time = player.get_video_len()  
+        min_buffer_threshold = 1000.0  # 假设值
+        max_buffer_threshold = max(min_buffer_threshold, retention_prob * max_download_time)
         return max_buffer_threshold
     
     def calculate_total_rebuffering(self, player, play_video_id, Players, bit_rate):
         total_rebuffering_time = 0.0
         
-        for j in range(play_video_id, play_video_id + len(Players)):
+        for j in range(play_video_id, len(Players)):
             z = player.get_play_chunk() if j == play_video_id else 0
-            pj_zk = self.calculate_retention_probability_z(Players[j-play_video_id], z)
+            pj_zk = self.calculate_retention_probability(Players[j])
             if player.video_chunk_counter == player.chunk_num:
                 download_time = 0
             else:
                 download_time = player.get_video_size(bit_rate) / self.past_bandwidth[-1]  # T(r_{i,m})
-            buffer_time = Players[j-play_video_id].get_buffer_size()
+            buffer_time = Players[j].get_buffer_size()
             
             # 计算每个视频 j 的重缓冲时间
             rebuffering_time_j = pj_zk * max(download_time - buffer_time, 0)
@@ -219,7 +202,7 @@ class Algorithm:
             if j > play_video_id:
                 pic_j = 1.0
                 for l in range(play_video_id, j):
-                    pic_j *= (1 - self.calculate_retention_probability(Players[l-play_video_id]))
+                    pic_j *= (1 - self.calculate_retention_probability(Players[l]))
             else:
                 pic_j = 1.0
             
@@ -233,7 +216,7 @@ class Algorithm:
         quality = retention_prob * self.calculate_quality(bit_rate, player)
         smoothness = retention_prob * self.calculate_smoothness(bit_rate, player)
         rebuffering = total_rebuffering_time + rebuf  # 累加即时重缓冲时间
-        qoe = self.w1 * quality - self.w3 * smoothness - self.w2 * rebuffering
+        qoe = self.w1 * quality - self.w2 * smoothness - self.w3 * rebuffering
         return qoe
 
     def calculate_cost(self, bit_rate, player):

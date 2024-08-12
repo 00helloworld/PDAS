@@ -112,6 +112,7 @@ class Environment:
             # if the current video has ended
             if actual_play_time == video_remain_time:
                 # Output: the downloaded time length, the total time length, the watch duration
+                # print('-- Env self.start_video_id: ', self.start_video_id)
                 print("\nUser stopped watching Video ", self.start_video_id, "( ", self.players[0].get_video_len(), " ms ) :")
                 print("User watched for ", self.user_models[0].get_ret_duration(), " ms, you downloaded ", self.players[0].get_chunk_counter()*VIDEO_CHUNCK_LEN, " sec.")
 
@@ -162,6 +163,7 @@ class Environment:
             else:
                 end_of_video = (self.players[self.play_video_id-self.start_video_id].get_remain_video_num() == 0)
         else:
+            # print('------ chunk_counter, ', self.players[download_video_id-self.start_video_id].video_chunk_counter)
             video_size = self.players[download_video_id-self.start_video_id].get_video_size(bitrate)
             # print("the actual download size is:", video_size)
             self.players[download_video_id - self.start_video_id].record_download_bitrate(bitrate)

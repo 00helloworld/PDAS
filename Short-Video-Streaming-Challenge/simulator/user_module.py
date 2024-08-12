@@ -10,7 +10,7 @@ VIDEO_CHUNCK_LEN = 1000.0
 # Rt simulate
 class Retention:
     def __init__(self, user_time, user_retent_rate, seeds):
-
+        seeds = list(map(int, seeds))
         assert len(user_time) == len(user_retent_rate)
 
         self.user_time = user_time

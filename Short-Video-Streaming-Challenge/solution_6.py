@@ -44,6 +44,8 @@ class Algorithm:
         # 5. play_video_id: the id of the current video
         # 6. Players: the video data of a RECOMMEND QUEUE of 5 (see specific definitions in readme)
         # 7. first_step: is this your first step?
+        print('--')
+        print('-- len(Players):', len(Players), '-- video_size: ', video_size, '-- play_video_id: ', play_video_id)
         if first_step:   # 第一步
             self.sleep_time = 0
             return play_video_id, 1, self.sleep_time
@@ -54,11 +56,17 @@ class Algorithm:
             self.past_bandwidth[-1] = (float(video_size)/1000000.0) /(float(delay) / 1000.0)  # MB / s
         
         # 1. 更新带宽估计
+        # self.update_bandwidth_estimate(video_size, delay)
         self.update_bandwidth_estimate_(video_size, delay)
+        print(f"-- past_bandwidth: {self.past_bandwidth}")
+        # print(f"-- past_bandwidth_ests: {self.past_bandwidth_ests}")
+        # print(f"-- past_errors: {self.past_errors}")
         
         # 2. 计算保留概率和Max Buffer阈值
         retention_probs = self.calculate_retention_probabilities(Players)
+        print('-- retention_probs: ', retention_probs)
         max_buffer_thresholds = self.calculate_max_buffer_thresholds(Players, retention_probs)
+        # print('-- max_buffer_thresholds: ', max_buffer_thresholds)
         
         # 3. 遍历视频，选择最优的比特率和视频
         best_video_id, best_bitrate, best_sleep_time = None, None, None
@@ -66,6 +74,7 @@ class Algorithm:
         
         res = []
         for i, player in enumerate(Players):
+            # print('-- i, player.get_buffer_size()', i, player.get_buffer_size())
             remaining_chunks = player.get_chunk_sum() - player.get_chunk_counter()  # 计算剩余的块数
             P = min(5, remaining_chunks)  # 确保 P 不超过剩余块数
             # P = remaining_chunks
@@ -92,9 +101,12 @@ class Algorithm:
                     best_sleep_time = 0
         
         # 4. 决策输出，如果没有合适的块可供下载，则返回睡眠时间
+        print('-- res(bit_rate, current_qoe, current_Ui)', res)
         if best_video_id is not None:
+            print('-- True play_video_id, best_video_id, best_bitrate, self.sleep_time:', play_video_id, best_video_id, best_bitrate, self.sleep_time)
             return best_video_id, best_bitrate, best_sleep_time
         else:
+            print('-- False play_video_id, best_video_id, best_bitrate, self.sleep_time:', play_video_id, best_video_id, best_bitrate, self.sleep_time)
             self.sleep_time = 500
             return play_video_id, 0, self.sleep_time  # 睡眠时间设为500ms
 
@@ -145,6 +157,7 @@ class Algorithm:
                 time_diff = user_time[i] - user_time[i - 1]
                 rate_diff = float(user_retent_rate[i]) - float(user_retent_rate[i - 1])
                 interpolated_value = float(user_retent_rate[i - 1]) + ((current_play_time - user_time[i - 1]) / time_diff) * rate_diff
+                # print('-- current_play_time', current_play_time, '-- interpolated_value', interpolated_value)
                 return interpolated_value
         
         # 如果当前播放时间超出所有已知时间点，返回最小的保留率

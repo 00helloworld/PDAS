@@ -52,6 +52,7 @@ def get_smooth(net_env, download_video_id, chunk_id, quality):
 
 
 def test(isBaseline, isQuickstart, user_id, trace_id, user_sample_id):
+    print('-- user_id, trace_id, user_sample_id: ', user_id, trace_id, user_sample_id)
     global LOG_FILE
     global log_file
     if isBaseline:  # Testing baseline algorithm
@@ -190,6 +191,7 @@ def test(isBaseline, isQuickstart, user_id, trace_id, user_sample_id):
 
         # Apply the participant's algorithm to decide the args for the next step
         download_video_id, bit_rate, sleep_time = solution.run(delay, rebuf, video_size, end_of_video, play_video_id, net_env.players, False)
+        # print('-- 0 download_video_id, play_video_id, len(net_env.players): ', download_video_id, play_video_id, len(net_env.players))
         assert 0 <= download_video_id - play_video_id < len(net_env.players), "The video you choose is not in the current Recommend Queue. \
                 \n   % You can only choose the current play video and its following four videos %"
 
@@ -199,6 +201,7 @@ def test(isBaseline, isQuickstart, user_id, trace_id, user_sample_id):
         if sleep_time != 0:
             print("You choose to sleep for ", sleep_time, " ms", file=log_file)
         else:
+            # print('-- 1 download_video_id, play_video_id, len(net_env.players): ', download_video_id, play_video_id, len(net_env.players))
             assert 0 <= download_video_id - play_video_id < len(net_env.players), "The video you choose is not in the current Recommend Queue. \
                 \n   % You can only choose the current play video and its following four videos %"
             print("Download Video ", download_video_id, " chunk (", net_env.players[download_video_id - play_video_id].get_chunk_counter() + 1, " / ",
@@ -225,6 +228,7 @@ def test_all_traces(isBaseline, isQuickstart, user_id, trace, user_sample_id):
     all_cooked_time, all_cooked_bw = short_video_load_trace.load_trace(cooked_trace_folder)
     for i in range(len(all_cooked_time)):
         print('------------trace ', i, '--------------')
+        print('***************', user_sample_id)
         avg += test(isBaseline, isQuickstart, user_id, i, user_sample_id)
         print('---------------------------------------\n\n')
     avg /= len(all_cooked_time)
